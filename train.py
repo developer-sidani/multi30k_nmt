@@ -49,7 +49,7 @@ def main(args):
         num_train_epochs=args.epochs,
         predict_with_generate=True,
         logging_steps=args.logging_steps,
-        save_steps=args.save_steps if args.save_steps else None,
+        save_steps=args.save_steps if args.save_steps else 1000,
         optim="adamw_torch",
         report_to=[]  # we assume Comet logging is handled separately
     )
@@ -90,7 +90,7 @@ if __name__ == "__main__":
     parser.add_argument("--weight_decay", type=float, default=0.01, help="Weight decay")
     parser.add_argument("--epochs", type=int, default=3, help="Number of training epochs")
     parser.add_argument("--logging_steps", type=int, default=500, help="Logging steps")
-    parser.add_argument("--save_steps", type=int, default=0, help="Steps between saving checkpoints")
+    parser.add_argument("--save_steps", type=int, default=1000, help="Steps between saving checkpoints")  # Ensure a positive integer default
     parser.add_argument("--use_cuda_if_available", action="store_true", dest="use_cuda_if_available", default=False, help="Use GPU if available")
     
     # Evaluation and saving options
