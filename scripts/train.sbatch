@@ -30,6 +30,8 @@ source ~/.bashrc
 
 source activate /home/asidani/.conda/envs/cliptrans
 
+cd /home/asidani/multi30k_nmt
+
 send_discord "[${SLURM_JOB_ID}]: Starting Training"
 
 PYTHON_PATH="/home/asidani/.conda/envs/cliptrans/bin/python3"
