@@ -50,7 +50,8 @@ TRAIN_PARAMS=(
     --weight_decay 0.01
     --epochs 15
     --logging_steps 500
-    --save_steps 1813
+    # --save_steps 1813
+    --save_steps 1
     --use_cuda_if_available
     --save_base_folder ./eval_outputs/
     --comet_logging
