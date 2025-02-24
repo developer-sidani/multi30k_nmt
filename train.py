@@ -41,7 +41,13 @@ def main(args):
     # Set training arguments. We use evaluation_strategy="epoch" so evaluation (on test_2016_val) is done every epoch.
     training_args = Seq2SeqTrainingArguments(
         output_dir=args.output_dir,
-        evaluation_strategy="epoch",
+        evaluation_strategy="steps",  # ✅ Evaluation happens at set intervals
+        save_strategy="steps",  # ✅ Save checkpoints at the same step intervals
+        eval_steps=args.save_steps if args.save_steps is not None else 1000,  # Set evaluation steps
+        save_steps=args.save_steps if args.save_steps is not None else 1000,  # Save at the same interval
+        load_best_model_at_end=True,
+        metric_for_best_model="bleu",
+        save_total_limit=3,
         learning_rate=args.learning_rate,
         per_device_train_batch_size=args.train_batch_size,
         per_device_eval_batch_size=args.eval_batch_size,
@@ -49,13 +55,10 @@ def main(args):
         num_train_epochs=args.epochs,
         predict_with_generate=True,
         logging_steps=args.logging_steps,
-        save_steps=args.save_steps if args.save_steps is not None else 1000,
-        save_total_limit=3,
-        load_best_model_at_end=True,
-        metric_for_best_model="bleu",
         optim="adamw_torch",
-        report_to=["comet_ml"] if args.comet_logging else [],  # Explicitly tell Trainer to log to Comet
+        report_to=["comet_ml"] if args.comet_logging else [],
     )
+
 
     
     trainer = Seq2SeqTrainer(
