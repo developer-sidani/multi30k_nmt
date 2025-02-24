@@ -49,10 +49,14 @@ def main(args):
         num_train_epochs=args.epochs,
         predict_with_generate=True,
         logging_steps=args.logging_steps,
-        save_steps=args.save_steps if args.save_steps else 1000,
+        save_steps=args.save_steps if args.save_steps is not None else 1000,
+        save_total_limit=3,
+        load_best_model_at_end=True,
+        metric_for_best_model="bleu",
         optim="adamw_torch",
-        report_to=[]  # we assume Comet logging is handled separately
+        report_to=["comet_ml"] if args.comet_logging else [],  # Explicitly tell Trainer to log to Comet
     )
+
     
     trainer = Seq2SeqTrainer(
         model=model,
@@ -60,7 +64,8 @@ def main(args):
         train_dataset=tokenized_datasets["train"],
         eval_dataset=tokenized_datasets["validation"],
         tokenizer=tokenizer,
-        compute_metrics=lambda eval_pred: compute_metrics(eval_pred, tokenizer)
+        compute_metrics=lambda eval_pred: compute_metrics(eval_pred, tokenizer),
+        callbacks=[experiment] if experiment else None  # Pass Comet experiment instance
     )
     
     # Start training.
