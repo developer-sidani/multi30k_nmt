@@ -29,9 +29,9 @@ def load_local_dataset(data_dir: str, src_suffix: str, tgt_suffix: str, test_yea
     test_src  = read_file(os.path.join(data_dir, f"test_2016_flickr.{src_suffix}"))
     test_tgt  = read_file(os.path.join(data_dir, f"test_2016_flickr.{tgt_suffix}"))
     
-    train_dataset = Dataset.from_dict({"src": train_src, "tgt": train_tgt})
-    val_dataset   = Dataset.from_dict({"src": val_src,   "tgt": val_tgt})
-    test_dataset  = Dataset.from_dict({"src": test_src,  "tgt": test_tgt})
+    train_dataset = Dataset.from_dict({"src": train_src[:10], "tgt": train_tgt[:10]})
+    val_dataset   = Dataset.from_dict({"src": val_src[:10],   "tgt": val_tgt[:10]})
+    test_dataset  = Dataset.from_dict({"src": test_src[:10],  "tgt": test_tgt[:10]})
     
     return DatasetDict({
         "train": train_dataset,
