@@ -43,10 +43,8 @@ def preprocess_function(examples, tokenizer, max_length=128):
     """
     Tokenizes inputs (from "src") and targets (from "tgt").
     """
-    inputs = examples["src"]
-    targets = examples["tgt"]
-    model_inputs = tokenizer(inputs, max_length=max_length, truncation=True)
-    with tokenizer.as_target_tokenizer():
-        labels = tokenizer(targets, max_length=max_length, truncation=True)
+    model_inputs = tokenizer(examples["src"], max_length=max_length, truncation=True, padding="max_length")
+    labels = tokenizer(text_target=examples["tgt"], max_length=max_length, truncation=True, padding="max_length")
+
     model_inputs["labels"] = labels["input_ids"]
     return model_inputs

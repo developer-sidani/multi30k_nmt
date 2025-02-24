@@ -11,6 +11,9 @@ from src.utils.evaluator import Evaluator
 def main(args):
     # Set device.
     args.device = "cuda" if torch.cuda.is_available() and args.use_cuda_if_available else "cpu"
+
+    # Disable tokenizer parallelism to avoid deadlocks
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
     
     # Initialize Comet experiment if flag enabled.
     experiment = None
@@ -29,7 +32,11 @@ def main(args):
     model.to(args.device)
     
     # Preprocess datasets.
-    tokenized_datasets = datasets.map(lambda ex: preprocess_function(ex, tokenizer, max_length=args.max_length), batched=True)
+    tokenized_datasets = datasets.map(
+        lambda ex: preprocess_function(ex, tokenizer, max_length=args.max_length),
+        batched=True,
+        remove_columns=datasets["train"].column_names
+    )
     
     # Set training arguments. We use evaluation_strategy="epoch" so evaluation (on test_2016_val) is done every epoch.
     training_args = Seq2SeqTrainingArguments(
@@ -43,6 +50,7 @@ def main(args):
         predict_with_generate=True,
         logging_steps=args.logging_steps,
         save_steps=args.save_steps if args.save_steps else None,
+        optim="adamw_torch",
         report_to=[]  # we assume Comet logging is handled separately
     )
     
