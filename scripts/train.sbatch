@@ -42,9 +42,9 @@ TRAIN_PARAMS=(
     --model_name facebook/mbart-large-50
     --src de
     --tgt fr
-    --max_length 128
-    --output_dir ./models/mbart50-multi30k
-    --learning_rate 1e-5
+    --max_length 64
+    --output_dir ./models/mbart50-multi30k-de
+    --learning_rate 5e-5
     --train_batch_size 16
     --eval_batch_size 16
     --weight_decay 0.01
