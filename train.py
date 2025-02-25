@@ -2,7 +2,7 @@
 import os
 import argparse
 import torch
-from transformers import Seq2SeqTrainingArguments, Seq2SeqTrainer, MBartForConditionalGeneration, MBart50TokenizerFast
+from transformers import Seq2SeqTrainingArguments, Seq2SeqTrainer
 from src.models.seq2seq import load_seq2seq_model
 from src.utils.data import load_local_dataset, preprocess_function, get_lang_code
 from src.utils.metrics import compute_metrics
@@ -37,7 +37,12 @@ def main(args):
         batched=True,
         remove_columns=datasets["train"].column_names
     )
-    
+    comet_callback = None
+    if args.comet_logging and experiment is not None:
+        from transformers.integrations import CometCallback
+        comet_callback = CometCallback()
+        # Manually set its experiment attribute to your pre‑existing experiment.
+        comet_callback.experiment = experiment
     # Set training arguments. We use evaluation_strategy="epoch" so evaluation (on test_2016_val) is done every epoch.
     training_args = Seq2SeqTrainingArguments(
         output_dir=args.output_dir,
@@ -51,7 +56,7 @@ def main(args):
         logging_steps=args.logging_steps,
         save_steps=args.save_steps if args.save_steps else 1000,
         optim="adamw_torch",
-        report_to=['comet_ml'] if args.comet_logging else []  # we assume Comet logging is handled separately
+        report_to=[]  # we assume Comet logging is handled separately
     )
     
     trainer = Seq2SeqTrainer(
@@ -60,7 +65,8 @@ def main(args):
         train_dataset=tokenized_datasets["train"],
         eval_dataset=tokenized_datasets["validation"],
         tokenizer=tokenizer,
-        compute_metrics=lambda eval_pred: compute_metrics(eval_pred, tokenizer)
+        compute_metrics=lambda eval_pred: compute_metrics(eval_pred, tokenizer),
+        callbacks=[comet_callback] if comet_callback is not None else None
     )
     
     # Start training.
