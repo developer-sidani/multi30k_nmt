@@ -51,7 +51,7 @@ def main(args):
         logging_steps=args.logging_steps,
         save_steps=args.save_steps if args.save_steps else 1000,
         optim="adamw_torch",
-        report_to=[]  # we assume Comet logging is handled separately
+        report_to=['comet_ml'] if args.comet_logging else []  # we assume Comet logging is handled separately
     )
     
     trainer = Seq2SeqTrainer(

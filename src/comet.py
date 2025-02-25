@@ -46,6 +46,11 @@ def init_comet(args, mode):
     comet_api_key = os.getenv('COMET_API_KEY')
     comet_project = os.getenv('COMET_PROJECT_NAME')
     comet_workspace = os.getenv('COMET_WORKSPACE')
+    # Set your Comet credentials as environment variables
+    os.environ["COMET_API_KEY"] = comet_api_key
+    os.environ["COMET_WORKSPACE"] = comet_workspace
+    os.environ["COMET_PROJECT_NAME"] = comet_project
+
     experiment = Experiment(api_key=comet_api_key, project_name=comet_project, workspace=comet_workspace)
     experiment.set_name(f"{mode}_{args.src}_to_{args.tgt}")
     experiment.log_parameters(args)
