@@ -40,8 +40,8 @@ PYTHON_PATH="/home/asidani/.conda/envs/cliptrans/bin/python3"
 TRAIN_PARAMS=(
     --data_dir ./data
     --model_name facebook/mbart-large-50
-    --src de
-    --tgt fr
+    --src en
+    --tgt de
     --max_length 64
     --output_dir ./models/mbart50-multi30k-de
     --learning_rate 5e-5
