@@ -58,7 +58,7 @@ def main(args):
         optim="adamw_torch",
         lr_scheduler_type="linear",
         warmup_steps=500,
-        load_best_model_at_end=True,
+        # load_best_model_at_end=True,
         metric_for_best_model="eval_bleu",
         greater_is_better=True,
         fp16=torch.cuda.is_available() and args.use_cuda_if_available,
