@@ -19,8 +19,10 @@ class Evaluator:
         """
         self.model.eval()
         device = self.args.device
-        sources = dataset["src"]
-        references = dataset["tgt"]
+        
+        # Ensure sources and references are lists of strings
+        sources = dataset["src"] if isinstance(dataset["src"], list) else dataset["src"].tolist()
+        references = dataset["tgt"] if isinstance(dataset["tgt"], list) else dataset["tgt"].tolist()
 
         # Create output folder if it doesn't exist
         base_path = os.path.join(self.args.save_base_folder, split_name, f"epoch_{epoch}")
@@ -37,11 +39,25 @@ class Evaluator:
             batch_end = min(i + batch_size, num_samples)
             batch_sources = sources[i:batch_end]
             
+            # Debug: print sample from batch
+            if i == 0:
+                print(f"Batch source example: {batch_sources[0]}")
+            
             # Tokenize the batch
-            inputs = self.tokenizer(batch_sources, return_tensors="pt", padding="max_length",
-                                    truncation=True, max_length=self.args.max_length)
+            inputs = self.tokenizer(batch_sources, 
+                                    return_tensors="pt", 
+                                    padding="max_length",
+                                    truncation=True, 
+                                    max_length=self.args.max_length)
+            
+            # Debug: print input keys
+            if i == 0:
+                print(f"Input keys: {inputs.keys()}")
+            
+            # Move inputs to device
             inputs = {k: v.to(device) for k, v in inputs.items()}
             
+            # Generate translations
             with torch.no_grad():
                 gen_ids = self.model.generate(
                     **inputs,
@@ -49,14 +65,26 @@ class Evaluator:
                     max_length=self.args.max_length
                 )
             
+            # Debug: print shape of generated IDs
+            if i == 0:
+                print(f"Generated IDs shape: {gen_ids.shape}")
+            
             # Decode batch predictions
             batch_predictions = self.tokenizer.batch_decode(gen_ids, skip_special_tokens=True)
+            
+            # Debug: print sample prediction
+            if i == 0:
+                print(f"Batch prediction example: {batch_predictions[0]}")
+            
             predictions.extend(batch_predictions)
             
             print(f"Processed {batch_end}/{num_samples} examples")
 
+        # Ensure all inputs to compute_metrics are properly formatted
+        eval_pred = (predictions, references)
+        
         # Compute metrics
-        metrics = compute_metrics((predictions, references), self.tokenizer)
+        metrics = compute_metrics(eval_pred, self.tokenizer)
         metrics.update({"epoch": epoch, "step": step})
 
         # Save evaluation results

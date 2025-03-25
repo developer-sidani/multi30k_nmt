@@ -2,8 +2,23 @@ import os
 from datasets import Dataset, DatasetDict
 
 def read_file(filepath: str):
-    with open(filepath, "r", encoding="utf-8") as f:
-        return [line.strip() for line in f if line.strip()]
+    """
+    Read a file and return its contents as a list of strings, with empty lines filtered out.
+    """
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            lines = [line.strip() for line in f]
+            # Filter out empty lines
+            lines = [line for line in lines if line.strip()]
+            
+            # Check if we have any content
+            if not lines:
+                print(f"Warning: File {filepath} is empty or contains only whitespace")
+                
+            return lines
+    except Exception as e:
+        print(f"Error reading file {filepath}: {str(e)}")
+        raise
 
 def get_lang_code(lang):
 	LANG_MAP = {

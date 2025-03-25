@@ -2,7 +2,7 @@
 import os
 import argparse
 import torch
-from datasets import Dataset
+import numpy as np
 from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
 from src.utils.data import read_file, get_lang_code
 from src.utils.evaluator import Evaluator
@@ -22,7 +22,22 @@ def load_test_data(data_dir: str, test_split: str, src_suffix: str, tgt_suffix: 
         raise FileNotFoundError(f"Target file not found: {tgt_file}")
         
     print(f"Loading test data from: {src_file} and {tgt_file}")
-    return {"src": read_file(src_file), "tgt": read_file(tgt_file)}
+    
+    # Read data as lists of strings
+    src_data = read_file(src_file)
+    tgt_data = read_file(tgt_file)
+    
+    # Add debug information about the data
+    print(f"Type of source data: {type(src_data)}")
+    print(f"Sample source: {src_data[0] if src_data else 'Empty'}")
+    print(f"Type of target data: {type(tgt_data)}")
+    print(f"Sample target: {tgt_data[0] if tgt_data else 'Empty'}")
+    
+    # Verify types are correct
+    assert all(isinstance(s, str) for s in src_data), "Source items must be strings"
+    assert all(isinstance(t, str) for t in tgt_data), "Target items must be strings"
+    
+    return {"src": src_data, "tgt": tgt_data}
 
 def main(args):
     # Initialize Comet experiment if enabled
@@ -35,11 +50,10 @@ def main(args):
     # Load test data
     try:
         test_data = load_test_data(args.data_dir, args.test_split, args.src, args.tgt)
-        test_dataset = Dataset.from_dict(test_data)
-        print(f"Loaded test dataset with {len(test_dataset)} examples")
+        print(f"Loaded test dataset with {len(test_data['src'])} examples")
         
         # Check for empty datasets
-        if len(test_dataset) == 0:
+        if len(test_data['src']) == 0 or len(test_data['tgt']) == 0:
             raise ValueError(f"Test dataset is empty for split: {args.test_split}")
     except Exception as e:
         print(f"Error loading test data: {str(e)}")
@@ -88,7 +102,9 @@ def main(args):
             experiment.log_metric("test_bleu", metrics['bleu'])
             experiment.log_metric("test_meteor", metrics['meteor'])
     except Exception as e:
+        import traceback
         print(f"Error during evaluation: {str(e)}")
+        print(traceback.format_exc())  # Print the full traceback for debugging
         if experiment:
             experiment.log_parameter("error", str(e))
 
