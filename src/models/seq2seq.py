@@ -7,4 +7,9 @@ def load_seq2seq_model(model_name_or_path: str, src_lang: str, tgt_lang: str):
     """
     model = MBartForConditionalGeneration.from_pretrained(model_name_or_path)
     tokenizer = MBart50TokenizerFast.from_pretrained(model_name_or_path)
+    
+    # Set the source and target languages for the tokenizer
+    tokenizer.src_lang = src_lang
+    tokenizer.tgt_lang = tgt_lang
+    
     return model, tokenizer

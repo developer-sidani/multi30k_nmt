@@ -57,9 +57,19 @@ def load_local_dataset(data_dir: str, src_suffix: str, tgt_suffix: str, test_yea
 def preprocess_function(examples, tokenizer, max_length=128):
     """
     Tokenizes inputs (from "src") and targets (from "tgt").
+    For mBART50, we encode source and target separately.
     """
+    # Tokenize inputs (source text)
     model_inputs = tokenizer(examples["src"], max_length=max_length, truncation=True, padding="max_length")
-    labels = tokenizer(text_target=examples["tgt"], max_length=max_length, truncation=True, padding="max_length")
-
+    
+    # Tokenize targets (target text)
+    # We use standard tokenization without text_target parameter
+    labels = tokenizer(examples["tgt"], max_length=max_length, truncation=True, padding="max_length")
+    
+    # Replace padding token id with -100 so it's ignored in the loss
+    labels["input_ids"] = [
+        [(l if l != tokenizer.pad_token_id else -100) for l in label] for label in labels["input_ids"]
+    ]
+    
     model_inputs["labels"] = labels["input_ids"]
     return model_inputs
