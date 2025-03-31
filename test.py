@@ -75,7 +75,7 @@ def main(args):
     try:
         print(f"Loading model from: {args.model_dir}")
         model = MBartForConditionalGeneration.from_pretrained(args.model_dir)
-        tokenizer = MBart50TokenizerFast.from_pretrained(args.model_dir, src_lang=args.src_lang, tgt_lang=args.tgt_lang)
+        tokenizer = MBart50TokenizerFast.from_pretrained(args.model_dir)
         model.to(device)
         print("Model loaded successfully")
     except Exception as e:

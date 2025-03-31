@@ -25,9 +25,11 @@ def main(args):
     # Load dataset from data_dir using provided src and tgt file suffixes.
     datasets = load_local_dataset(args.data_dir, src_suffix=args.src, tgt_suffix=args.tgt)
     
-    # Load model and tokenizer using model_name and language codes.
+    # Load model and tokenizer using model_name
+    # Convert src and tgt to full language codes for later use
     args.src_lang = get_lang_code(args.src)
     args.tgt_lang = get_lang_code(args.tgt)
+    
     model, tokenizer = load_seq2seq_model(args.model_name, src_lang=args.src_lang, tgt_lang=args.tgt_lang)
     model.to(args.device)
     
