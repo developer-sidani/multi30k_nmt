@@ -66,17 +66,17 @@ def main(args):
         fp16=torch.cuda.is_available() and args.use_cuda_if_available,
         report_to=[]  # we assume Comet logging is handled separately
     )
-    
+
     trainer = Seq2SeqTrainer(
         model=model,
         args=training_args,
         train_dataset=tokenized_datasets["train"],
         eval_dataset=tokenized_datasets["validation"],
         tokenizer=tokenizer,
-        compute_metrics=lambda eval_pred: compute_metrics(eval_pred, tokenizer),
+        compute_metrics=lambda eval_pred: compute_metrics(eval_pred, tokenizer, experiment=experiment),
         callbacks=[comet_callback] if comet_callback is not None else None
     )
-    
+
     # Start training.
     trainer.train()
     

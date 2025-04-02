@@ -35,6 +35,7 @@ PYTHON_PATH="/home/asidani/.conda/envs/cliptrans/bin/python3"
 
 # Define all language pairs to train
 LANG_PAIRS=(
+    "en2de"
     "de2en"
     "en2fr"
     "fr2en"
@@ -194,8 +195,6 @@ for LANG_PAIR in "${LANG_PAIRS[@]}"; do
     fi
     
     # Clean up GPU memory before starting the next training
-    nvidia-smi --gpu-reset
-    sleep 30  # Give some time for system to stabilize before next training
 done
 
 send_discord "[${SLURM_JOB_ID}]: All training jobs completed"
