@@ -1,75 +1,186 @@
-import os
-from datasets import Dataset, DatasetDict
+import torch
+from torch.utils.data import Dataset, DataLoader
+from typing import List, Dict, Tuple, Optional, Union
 
-def read_file(filepath: str):
-    """
-    Read a file and return its contents as a list of strings, with empty lines filtered out.
-    """
-    try:
-        with open(filepath, "r", encoding="utf-8") as f:
-            lines = [line.strip() for line in f]
-            # Filter out empty lines
-            lines = [line for line in lines if line.strip()]
-            
-            # Check if we have any content
-            if not lines:
-                print(f"Warning: File {filepath} is empty or contains only whitespace")
-                
-            return lines
-    except Exception as e:
-        print(f"Error reading file {filepath}: {str(e)}")
-        raise
 
-def get_lang_code(lang):
-	LANG_MAP = {
-				'ar': 'ar_AR', 'cs': 'cs_CZ', 'de': 'de_DE', 'en': 'en_XX', 'es': 'es_XX', 'et': 'et_EE', 
-				'fi': 'fi_FI', 'fr': 'fr_XX', 'gu': 'gu_IN', 'hi': 'hi_IN', 'it': 'it_IT', 'ja': 'ja_XX', 
-				'kk': 'kk_KZ', 'ko': 'ko_KR', 'lt': 'lt_LT', 'lv': 'lv_LV', 'my': 'my_MM', 'ne': 'ne_NP', 
-				'nl': 'nl_XX', 'ro': 'ro_RO', 'ru': 'ru_RU', 'si': 'si_LK', 'tr': 'tr_TR', 'vi': 'vi_VN', 
-				'zh': 'zh_CN', 'af': 'af_ZA'
-			}
-	return LANG_MAP[lang]
-def load_local_dataset(data_dir: str, src_suffix: str, tgt_suffix: str, test_year: str="2016", test_dataset: str="flickr") -> DatasetDict:
+class NMTDataset(Dataset):
     """
-    Expects files to be named as:
-      - train.<src_suffix>, train.<tgt_suffix>
-      - test_2016_val.<src_suffix>, test_2016_val.<tgt_suffix>
-      - test_2016_flickr.<src_suffix>, test_2016_flickr.<tgt_suffix>
-    Returns a DatasetDict with splits: "train", "validation", "test".
+    Dataset for Neural Machine Translation with source and target sentences.
     """
-    train_src = read_file(os.path.join(data_dir, f"train.{src_suffix}"))
-    train_tgt = read_file(os.path.join(data_dir, f"train.{tgt_suffix}"))
-    val_src   = read_file(os.path.join(data_dir, f"test_2016_val.{src_suffix}"))
-    val_tgt   = read_file(os.path.join(data_dir, f"test_2016_val.{tgt_suffix}"))
-    test_src  = read_file(os.path.join(data_dir, f"test_2016_flickr.{src_suffix}"))
-    test_tgt  = read_file(os.path.join(data_dir, f"test_2016_flickr.{tgt_suffix}"))
-    
-    train_dataset = Dataset.from_dict({"src": train_src, "tgt": train_tgt})
-    val_dataset   = Dataset.from_dict({"src": val_src,   "tgt": val_tgt})
-    test_dataset  = Dataset.from_dict({"src": test_src,  "tgt": test_tgt})
-    
-    return DatasetDict({
-        "train": train_dataset,
-        "validation": val_dataset,
-        "test": test_dataset
-    })
 
-def preprocess_function(examples, tokenizer, max_length=128):
+    def __init__(
+            self,
+            source_sentences: List[str],
+            target_sentences: Optional[List[str]] = None,
+    ):
+        """
+        Initialize the dataset with source and target sentences.
+
+        Args:
+            source_sentences: List of source language sentences
+            target_sentences: List of target language sentences (optional for inference)
+        """
+        self.source_sentences = source_sentences
+        self.target_sentences = target_sentences
+
+    def __len__(self):
+        return len(self.source_sentences)
+
+    def __getitem__(self, idx):
+        if self.target_sentences is not None:
+            return self.source_sentences[idx], self.target_sentences[idx]
+        else:
+            return self.source_sentences[idx]
+
+
+class ReferenceDataset(Dataset):
     """
-    Tokenizes inputs (from "src") and targets (from "tgt").
-    For mBART50, we encode source and target separately.
+    Dataset for evaluation with references.
     """
-    # Tokenize inputs (source text)
-    model_inputs = tokenizer(examples["src"], max_length=max_length, truncation=True, padding="max_length")
-    
-    # Tokenize targets (target text)
-    # We use standard tokenization without text_target parameter
-    labels = tokenizer(examples["tgt"], max_length=max_length, truncation=True, padding="max_length")
-    
-    # Replace padding token id with -100 so it's ignored in the loss
-    labels["input_ids"] = [
-        [(l if l != tokenizer.pad_token_id else -100) for l in label] for label in labels["input_ids"]
-    ]
-    
-    model_inputs["labels"] = labels["input_ids"]
-    return model_inputs
+
+    def __init__(
+            self,
+            source_sentences: List[str],
+            references: List[List[str]],
+    ):
+        """
+        Initialize the dataset with source sentences and references.
+
+        Args:
+            source_sentences: List of source language sentences
+            references: List of lists of reference translations
+        """
+        self.source_sentences = source_sentences
+        self.references = references
+
+    def __len__(self):
+        return len(self.source_sentences)
+
+    def __getitem__(self, idx):
+        return self.source_sentences[idx], self.references[idx]
+
+    @staticmethod
+    def collate_fn(batch):
+        """
+        Custom collate function for reference dataset.
+
+        Args:
+            batch: List of (source, references) tuples
+
+        Returns:
+            Tuple of (sources, references)
+        """
+        sources, references = zip(*batch)
+        return list(sources), list(references)
+
+
+def load_dataset(src_path: str, tgt_path: Optional[str] = None, max_samples: Optional[int] = None) -> Tuple[
+    List[str], Optional[List[str]]]:
+    """
+    Load source and optional target sentences from files.
+
+    Args:
+        src_path: Path to source language file
+        tgt_path: Optional path to target language file
+        max_samples: Maximum number of samples to load
+
+    Returns:
+        Tuple of (source_sentences, target_sentences)
+    """
+    with open(src_path, 'r', encoding='utf-8') as f:
+        src_sentences = [line.strip() for line in f.readlines()]
+
+    if max_samples:
+        src_sentences = src_sentences[:max_samples]
+
+    if tgt_path:
+        with open(tgt_path, 'r', encoding='utf-8') as f:
+            tgt_sentences = [line.strip() for line in f.readlines()]
+
+        if max_samples:
+            tgt_sentences = tgt_sentences[:max_samples]
+
+        # Ensure source and target have the same length
+        min_len = min(len(src_sentences), len(tgt_sentences))
+        src_sentences = src_sentences[:min_len]
+        tgt_sentences = tgt_sentences[:min_len]
+
+        return src_sentences, tgt_sentences
+
+    return src_sentences, None
+
+
+def load_references(ref_path: str, n_references: int = 1, max_samples: Optional[int] = None) -> List[List[str]]:
+    """
+    Load reference translations for evaluation.
+
+    Args:
+        ref_path: Base path to references
+        n_references: Number of references per source sentence
+        max_samples: Maximum number of samples to load
+
+    Returns:
+        List of reference lists, where each inner list contains alternative translations
+    """
+    references = []
+
+    # Load each reference file
+    for i in range(n_references):
+        ref_file = f"{ref_path}/reference{i}.txt"
+        with open(ref_file, 'r', encoding='utf-8') as f:
+            refs = [line.strip() for line in f.readlines()]
+
+        if max_samples:
+            refs = refs[:max_samples]
+
+        # Initialize references list if this is the first file
+        if i == 0:
+            references = [[ref] for ref in refs]
+        else:
+            # Add additional references
+            for j, ref in enumerate(refs):
+                if j < len(references):  # Safety check
+                    references[j].append(ref)
+
+    return references
+
+
+def get_language_code(lang: str) -> str:
+    """
+    Convert short language code to full mBART language code.
+
+    Args:
+        lang: Short language code (e.g., 'en', 'de')
+
+    Returns:
+        Full mBART language code
+    """
+    lang_map = {
+        'ar': 'ar_AR',
+        'cs': 'cs_CZ',
+        'de': 'de_DE',
+        'en': 'en_XX',
+        'es': 'es_XX',
+        'et': 'et_EE',
+        'fi': 'fi_FI',
+        'fr': 'fr_XX',
+        'gu': 'gu_IN',
+        'hi': 'hi_IN',
+        'it': 'it_IT',
+        'ja': 'ja_XX',
+        'kk': 'kk_KZ',
+        'ko': 'ko_KR',
+        'lt': 'lt_LT',
+        'lv': 'lv_LV',
+        'my': 'my_MM',
+        'ne': 'ne_NP',
+        'nl': 'nl_XX',
+        'ro': 'ro_RO',
+        'ru': 'ru_RU',
+        'si': 'si_LK',
+        'tr': 'tr_TR',
+        'vi': 'vi_VN',
+        'zh': 'zh_CN',
+        'af': 'af_ZA'
+    }
+    return lang_map.get(lang, 'en_XX')  # Default to English if code not found

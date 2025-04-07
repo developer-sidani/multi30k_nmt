@@ -33,173 +33,77 @@ cd /home/asidani/multi30k_nmt
 
 PYTHON_PATH="/home/asidani/.conda/envs/cliptrans/bin/python3"
 
-# Define all language pairs to train
-LANG_PAIRS=(
-    "en2de"
-    "de2en"
-    "en2fr"
-    "fr2en"
-    "en2cs"
-    "cs2en"
+send_discord "[${SLURM_JOB_ID}]: Starting Seq2Seq Training"
+
+# Base parameters
+BASE_PARAMS=(
+    --model_name "facebook/mbart-large-50"
+    --data_dir "./data"
+    --max_seq_length 64
+    --batch_size 16
+    --eval_batch_size 16
+    --learning_rate 3e-5
+    --epochs 15
+    --warmup_steps 500
+    --lr_scheduler_type "linear"
+    --weight_decay 0.01
+    --eval_steps 1000
+    --save_steps 1
+    --num_workers 4
+    --pin_memory
+    --use_cuda
+    --comet_logging
 )
 
-send_discord "[${SLURM_JOB_ID}]: Starting training for all language pairs: ${LANG_PAIRS[*]}"
+# Create a directory for saving models
+SAVE_BASE="./seq2seq_models"
+mkdir -p $SAVE_BASE
 
-# Train each language pair sequentially
-for LANG_PAIR in "${LANG_PAIRS[@]}"; do
-    echo "[SCRIPT]: Starting training for language pair: ${LANG_PAIR}"
-    send_discord "[${SLURM_JOB_ID}]: Starting training for ${LANG_PAIR}"
-    
-    case $LANG_PAIR in
-        en2de)
-            TRAIN_PARAMS=(
-                --data_dir ./data
-                --model_name facebook/mbart-large-50
-                --src en
-                --tgt de
-                --max_length 64
-                --output_dir ./models/mbart50-multi30k-de
-                --learning_rate 5e-5
-                --train_batch_size 16
-                --eval_batch_size 16
-                --weight_decay 0.01
-                --epochs 15
-                --logging_steps 500
-                --save_steps 1
-                --use_cuda_if_available
-                --save_base_folder ./eval_outputs/en2de/
-                --comet_logging
-            )
-            ;;
-        de2en)
-            TRAIN_PARAMS=(
-                --data_dir ./data
-                --model_name facebook/mbart-large-50
-                --src de
-                --tgt en
-                --max_length 64
-                --output_dir ./models/mbart50-multi30k-de2en
-                --learning_rate 5e-5
-                --train_batch_size 16
-                --eval_batch_size 16
-                --weight_decay 0.01
-                --epochs 15
-                --logging_steps 500
-                --save_steps 1
-                --use_cuda_if_available
-                --save_base_folder ./eval_outputs/de2en/
-                --comet_logging
-            )
-            ;;
-        en2fr)
-            TRAIN_PARAMS=(
-                --data_dir ./data
-                --model_name facebook/mbart-large-50
-                --src en
-                --tgt fr
-                --max_length 64
-                --output_dir ./models/mbart50-multi30k-fr
-                --learning_rate 5e-5
-                --train_batch_size 16
-                --eval_batch_size 16
-                --weight_decay 0.01
-                --epochs 15
-                --logging_steps 500
-                --save_steps 1
-                --use_cuda_if_available
-                --save_base_folder ./eval_outputs/en2fr/
-                --comet_logging
-            )
-            ;;
-        fr2en)
-            TRAIN_PARAMS=(
-                --data_dir ./data
-                --model_name facebook/mbart-large-50
-                --src fr
-                --tgt en
-                --max_length 64
-                --output_dir ./models/mbart50-multi30k-fr2en
-                --learning_rate 5e-5
-                --train_batch_size 16
-                --eval_batch_size 16
-                --weight_decay 0.01
-                --epochs 15
-                --logging_steps 500
-                --save_steps 1
-                --use_cuda_if_available
-                --save_base_folder ./eval_outputs/fr2en/
-                --comet_logging
-            )
-            ;;
-        en2cs)
-            TRAIN_PARAMS=(
-                --data_dir ./data
-                --model_name facebook/mbart-large-50
-                --src en
-                --tgt cs
-                --max_length 64
-                --output_dir ./models/mbart50-multi30k-cs
-                --learning_rate 5e-5
-                --train_batch_size 16
-                --eval_batch_size 16
-                --weight_decay 0.01
-                --epochs 15
-                --logging_steps 500
-                --save_steps 1
-                --use_cuda_if_available
-                --save_base_folder ./eval_outputs/en2cs/
-                --comet_logging
-            )
-            ;;
-        cs2en)
-            TRAIN_PARAMS=(
-                --data_dir ./data
-                --model_name facebook/mbart-large-50
-                --src cs
-                --tgt en
-                --max_length 64
-                --output_dir ./models/mbart50-multi30k-cs2en
-                --learning_rate 5e-5
-                --train_batch_size 16
-                --eval_batch_size 16
-                --weight_decay 0.01
-                --epochs 15
-                --logging_steps 500
-                --save_steps 1
-                --use_cuda_if_available
-                --save_base_folder ./eval_outputs/cs2en/
-                --comet_logging
-            )
-            ;;
-        *)
-            echo "[SCRIPT]: Invalid language pair: ${LANG_PAIR}"
-            send_discord "[${SLURM_JOB_ID}]: ERROR - Invalid language pair: ${LANG_PAIR}"
-            continue
-            ;;
-    esac
+# Define language pairs for training
+# en->de, de->en, en->fr, fr->en, en->cs, cs->en
+LANGUAGE_PAIRS=(
+    "en de"
+    "de en"
+    "en fr"
+    "fr en"
+    "en cs"
+    "cs en"
+)
 
-    echo "[SCRIPT]: Running training for ${LANG_PAIR} with parameters:"
-    echo "${TRAIN_PARAMS[@]}"
+# Train each language pair
+for pair in "${LANGUAGE_PAIRS[@]}"; do
+    read -r src_lang tgt_lang <<< "$pair"
 
-    # Run the training for this language pair
-    $PYTHON_PATH train.py "${TRAIN_PARAMS[@]}"
-    
-    TRAIN_EXIT_CODE=$?
-    
-    if [ $TRAIN_EXIT_CODE -ne 0 ]; then
-        send_discord "[${SLURM_JOB_ID}]: Training for ${LANG_PAIR} failed with exit code ${TRAIN_EXIT_CODE}"
-        echo "[SCRIPT]: Training for ${LANG_PAIR} failed with exit code ${TRAIN_EXIT_CODE}"
+    send_discord "[${SLURM_JOB_ID}]: Training ${src_lang}->${tgt_lang}"
+
+    SAVE_DIR="${SAVE_BASE}/${src_lang}_${tgt_lang}"
+    mkdir -p $SAVE_DIR
+
+    # Set training parameters for this language pair
+    TRAIN_PARAMS=(
+        --src_lang "$src_lang"
+        --tgt_lang "$tgt_lang"
+        --save_base_folder "$SAVE_DIR"
+    )
+
+    # Start training
+    echo "[SCRIPT]: Training ${src_lang}->${tgt_lang}"
+    $PYTHON_PATH train.py "${BASE_PARAMS[@]}" "${TRAIN_PARAMS[@]}"
+
+    # Check if training completed successfully
+    if [ $? -eq 0 ]; then
+        send_discord "[${SLURM_JOB_ID}]: Training ${src_lang}->${tgt_lang} completed successfully"
     else
-        send_discord "[${SLURM_JOB_ID}]: Training for ${LANG_PAIR} completed successfully"
-        echo "[SCRIPT]: Training for ${LANG_PAIR} completed successfully"
+        send_discord "[${SLURM_JOB_ID}]: Training ${src_lang}->${tgt_lang} failed"
     fi
-    
-    # Clean up GPU memory before starting the next training
 done
 
 send_discord "[${SLURM_JOB_ID}]: All training jobs completed"
 
-LOG_FILE="/home/asidani/logs/nmt/job_name_${SLURM_JOB_ID}.log"
-ERR_FILE="/home/asidani/logs/nmt/job_name_${SLURM_JOB_ID}.err"
+# Send logs if notif.py script exists
+LOG_FILE="/home/$USER/logs/seq2seq/train_${SLURM_JOB_ID}.log"
+ERR_FILE="/home/$USER/logs/seq2seq/train_${SLURM_JOB_ID}.err"
 
-python3 /home/asidani/notif.py "$LOG_FILE" "$ERR_FILE"
+if [ -f "/home/$USER/notif.py" ]; then
+    python3 /home/$USER/notif.py "$LOG_FILE" "$ERR_FILE"
+fi

@@ -1,120 +1,137 @@
 import os
-import pickle
+import torch
 import numpy as np
 import pandas as pd
-import torch
-from src.utils.metrics import compute_metrics
+import pickle
+from typing import Dict, List, Optional, Tuple, Union
+
+from torch.utils.data import DataLoader
+from src.utils.metrics import compute_all_metrics
+
 
 class Evaluator:
-    def __init__(self, model, tokenizer, args, experiment=None):
+    """
+    Evaluation class for Seq2Seq models.
+    """
+
+    def __init__(self, model, args, experiment=None):
+        """
+        Initialize the evaluator.
+
+        Args:
+            model: The Seq2Seq model to evaluate
+            args: Command line arguments
+            experiment: Comet ML experiment for logging
+        """
         self.model = model
-        self.tokenizer = tokenizer
         self.args = args
         self.experiment = experiment
 
-    def evaluate_split(self, dataset, split_name: str, epoch: int, step: int):
+    def evaluate(
+            self,
+            dataloader: DataLoader,
+            phase: str = 'validation',
+            epoch: int = 0,
+            step: int = 0,
+            src_lang: str = 'en',
+            tgt_lang: str = 'de',
+            test_set: str = 'flickr2016'
+    ) -> Dict[str, float]:
         """
-        Evaluate a dataset split. Generates predictions in batches,
-        computes BLEU/METEOR, and logs results.
-        """
-        self.model.eval()
-        device = self.args.device
-        
-        # Ensure sources and references are lists of strings
-        sources = dataset["src"] if isinstance(dataset["src"], list) else dataset["src"].tolist()
-        references = dataset["tgt"] if isinstance(dataset["tgt"], list) else dataset["tgt"].tolist()
+        Evaluate the model on the given dataloader.
 
-        # Create output folder if it doesn't exist
-        base_path = os.path.join(self.args.save_base_folder, split_name, f"epoch_{epoch}")
-        os.makedirs(base_path, exist_ok=True)
-        
-        print(f"Evaluating {len(sources)} examples for {split_name}")
-        
-        # Process in batches if dataset is large
-        batch_size = self.args.eval_batch_size if hasattr(self.args, 'eval_batch_size') else 16
-        num_samples = len(sources)
+        Args:
+            dataloader: DataLoader containing source sentences and references
+            phase: 'validation' or 'test'
+            epoch: Current epoch number
+            step: Current training step
+            src_lang: Source language code
+            tgt_lang: Target language code
+            test_set: Name of the test set (e.g., 'flickr2016')
+
+        Returns:
+            Dictionary with evaluation metrics
+        """
+        print(f'Starting {phase} evaluation for {src_lang}->{tgt_lang} on {test_set}...')
+
+        self.model.eval_mode()  # Set model to evaluation mode
+
+        source_sentences = []
+        references = []
         predictions = []
-        
-        for i in range(0, num_samples, batch_size):
-            batch_end = min(i + batch_size, num_samples)
-            batch_sources = sources[i:batch_end]
-            
-            # Debug: print sample from batch
-            if i == 0:
-                print(f"Batch source example: {batch_sources[0]}")
-            
-            # Tokenize the batch
-            inputs = self.tokenizer(batch_sources, 
-                                    return_tensors="pt", 
-                                    padding="max_length",
-                                    truncation=True, 
-                                    max_length=self.args.max_length)
-            
-            # Debug: print input keys
-            if i == 0:
-                print(f"Input keys: {inputs.keys()}")
-            
-            # Move inputs to device
-            inputs = {k: v.to(device) for k, v in inputs.items()}
-            
-            # Generate translations
-            with torch.no_grad():
-                gen_ids = self.model.generate(
-                    **inputs,
-                    forced_bos_token_id=self.tokenizer.lang_code_to_id[self.args.tgt_lang],
-                    max_length=self.args.max_length
-                )
-            
-            # Debug: print shape of generated IDs
-            if i == 0:
-                print(f"Generated IDs shape: {gen_ids.shape}")
-            
-            # Decode batch predictions
-            batch_predictions = self.tokenizer.batch_decode(gen_ids, skip_special_tokens=True)
-            
-            # Debug: print sample prediction
-            if i == 0:
-                print(f"Batch prediction example: {batch_predictions[0]}")
-            
-            predictions.extend(batch_predictions)
-            
-            print(f"Processed {batch_end}/{num_samples} examples")
 
-        # Ensure all inputs to compute_metrics are properly formatted
-        eval_pred = (predictions, references)
-        
+        with torch.no_grad():
+            for batch in dataloader:
+                # Unpack the batch
+                src_batch, ref_batch = batch
+
+                # Generate translations
+                _, translated = self.model.translate(src_batch, device=self.args.device)
+
+                # Store results
+                source_sentences.extend(src_batch)
+                references.extend(ref_batch)
+                predictions.extend(translated)
+
         # Compute metrics
-        metrics = compute_metrics(eval_pred, self.tokenizer)
-        metrics.update({"epoch": epoch, "step": step})
+        metrics = compute_all_metrics(predictions, references)
+        metrics['epoch'] = epoch
+        metrics['step'] = step
+        metrics['src_lang'] = src_lang
+        metrics['tgt_lang'] = tgt_lang
+        metrics['test_set'] = test_set
 
-        # Save evaluation results
-        df = pd.DataFrame({"Source": sources, "Prediction": predictions, "Reference": references})
-        
-        csv_path = os.path.join(base_path, f"{split_name}_epoch{epoch}_step{step}.csv")
-        pickle_path = os.path.join(base_path, f"metrics_epoch{epoch}_step{step}.pickle")
-        
-        df.to_csv(csv_path, index=False)
-        with open(pickle_path, 'wb') as f:
-            pickle.dump(metrics, f)
+        # Create directory for results if it doesn't exist
+        if phase == 'validation':
+            base_path = f"{self.args.save_base_folder}/epoch_{epoch}/"
+        else:
+            base_path = f"{self.args.save_base_folder}/test/{test_set}/"
 
-        # Log to Comet if enabled
-        if self.args.comet_logging and self.experiment is not None:
-            self.experiment.log_table(csv_path, tabular_data=df, headers=True)
-            for k, v in metrics.items():
-                if k not in ["epoch", "step"]:
-                    self.experiment.log_metric(f"{split_name}_{k}", v, step=step, epoch=epoch)
-                    
-        # Log some examples
-        print(f"\nEvaluation on {split_name} (epoch {epoch}, step {step}):")
-        print(f"BLEU = {metrics['bleu']:.2f}, METEOR = {metrics['meteor']:.2f}")
-        
-        # Print a few examples
-        num_examples = min(3, len(df))
-        print("\nExample translations:")
-        for i in range(num_examples):
-            print(f"Source: {df['Source'].iloc[i]}")
-            print(f"Prediction: {df['Prediction'].iloc[i]}")
-            print(f"Reference: {df['Reference'].iloc[i]}")
-            print("-" * 50)
-        
-        return metrics, df
+        os.makedirs(os.path.dirname(base_path), exist_ok=True)
+
+        # Save metrics
+        suffix = f"{src_lang}_{tgt_lang}_{epoch}"
+        if phase == 'test':
+            suffix += f"_{test_set}"
+
+        pickle.dump(metrics, open(f"{base_path}metrics_{suffix}.pickle", 'wb'))
+
+        # Create and save dataframe with predictions
+        df = pd.DataFrame()
+        df['source'] = source_sentences
+        df['prediction'] = predictions
+
+        # Add references to dataframe
+        for i in range(len(references[0])):
+            df[f'reference_{i + 1}'] = [ref[i] if i < len(ref) else "" for ref in references]
+
+        df.to_csv(f"{base_path}predictions_{suffix}.csv", sep=',', header=True, index=False)
+
+        # Log to Comet ML if available
+        if self.experiment:
+            context = self.experiment.validate if phase == 'validation' else self.experiment.test
+            with context():
+                # Log metrics
+                for metric_name, metric_value in metrics.items():
+                    if metric_name not in ['epoch', 'step', 'src_lang', 'tgt_lang', 'test_set']:
+                        self.experiment.log_metric(
+                            f"{metric_name}_{src_lang}_{tgt_lang}",
+                            metric_value,
+                            step=step,
+                            epoch=epoch
+                        )
+
+                # Log prediction table
+                self.experiment.log_table(
+                    f"predictions_{src_lang}_{tgt_lang}_{test_set}.csv",
+                    tabular_data=df,
+                    headers=True
+                )
+
+        # Print metrics
+        print(f"Evaluation results for {src_lang}->{tgt_lang} on {test_set}:")
+        for metric_name, metric_value in metrics.items():
+            if metric_name not in ['epoch', 'step', 'src_lang', 'tgt_lang', 'test_set']:
+                print(f"  {metric_name}: {metric_value:.4f}")
+
+        return metrics

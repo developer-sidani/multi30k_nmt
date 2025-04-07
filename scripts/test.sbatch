@@ -29,110 +29,108 @@ source activate /home/asidani/.conda/envs/cliptrans
 
 cd /home/asidani/multi30k_nmt
 
-send_discord "[${SLURM_JOB_ID}]: Starting Testing"
+send_discord "[${SLURM_JOB_ID}]: Starting Seq2Seq Testing"
 
 PYTHON_PATH="/home/asidani/.conda/envs/cliptrans/bin/python3"
 
-LANG_PAIRS=(
-    "en2de"
-    "de2en"
-    "en2fr"
-    "fr2en"
-    "en2cs"
-    "cs2en"
+# Base parameters
+BASE_PARAMS=(
+    --model_name "facebook/mbart-large-50"
+    --data_dir "./data"
+    --max_seq_length 64
+    --batch_size 32
+    --num_workers 4
+    --pin_memory
+    --use_cuda
+    --comet_logging
 )
 
-send_discord "[${SLURM_JOB_ID}]: Starting testing for all language pairs: ${LANG_PAIRS[*]}"
+# Create a directory for saving test results
+RESULTS_BASE="./seq2seq_results"
+mkdir -p $RESULTS_BASE
 
-# List of test splits to evaluate
-TEST_SPLITS=(
-    "test_2016_flickr"
-    "test_2016_val"
-    "test_2017_flickr"
-    "test_2017_mscoco"
-    "test_2018_flickr"
-)
+# Define test sets
+TEST_SETS=("flickr2016" "flickr2017" "flickr2018" "mscoco2017")
 
-# Test each language pair sequentially
-for LANG_PAIR in "${LANG_PAIRS[@]}"; do
-    echo "[SCRIPT]: Starting testing for language pair: ${LANG_PAIR}"
-    send_discord "[${SLURM_JOB_ID}]: Starting testing for ${LANG_PAIR}"
+# Define all language pairs to test
+# Flickr2016: en<->de, en<->fr, en<->cs
+# Flickr2017, Flickr2018, MSCOCO2017: en<->de, en<->fr
 
-    case $LANG_PAIR in
-        en2de)
-            SRC="en"
-            TGT="de"
-            MODEL_DIR="./models/mbart50-multi30k-de"
-            SAVE_FOLDER="./eval_outputs/en2de/"
-            ;;
-        de2en)
-            SRC="de"
-            TGT="en"
-            MODEL_DIR="./models/mbart50-multi30k-de2en"
-            SAVE_FOLDER="./eval_outputs/de2en/"
-            ;;
-        en2fr)
-            SRC="en"
-            TGT="fr"
-            MODEL_DIR="./models/mbart50-multi30k-fr"
-            SAVE_FOLDER="./eval_outputs/en2fr/"
-            ;;
-        fr2en)
-            SRC="fr"
-            TGT="en"
-            MODEL_DIR="./models/mbart50-multi30k-fr2en"
-            SAVE_FOLDER="./eval_outputs/fr2en/"
-            ;;
-        en2cs)
-            SRC="en"
-            TGT="cs"
-            MODEL_DIR="./models/mbart50-multi30k-cs"
-            SAVE_FOLDER="./eval_outputs/en2cs/"
-            ;;
-        cs2en)
-            SRC="cs"
-            TGT="en"
-            MODEL_DIR="./models/mbart50-multi30k-cs2en"
-            SAVE_FOLDER="./eval_outputs/cs2en/"
-            ;;
-    esac
+for test_set in "${TEST_SETS[@]}"; do
+    echo "[SCRIPT]: Testing on $test_set"
 
-    for TEST_SPLIT in "${TEST_SPLITS[@]}"; do
-        if [ -f "./data/${TEST_SPLIT}.${SRC}" ] && [ -f "./data/${TEST_SPLIT}.${TGT}" ]; then
-            echo "[SCRIPT]: Testing on ${TEST_SPLIT} (${SRC}->${TGT})"
+    # Define applicable language pairs for this test set
+    LANGUAGE_PAIRS=()
 
-            TEST_PARAMS=(
-                --data_dir ./data
-                --model_dir "${MODEL_DIR}"
-                --test_split "${TEST_SPLIT}"
-                --src "${SRC}"
-                --tgt "${TGT}"
-                --max_length 64
-                --use_cuda_if_available
-                --save_base_folder "${SAVE_FOLDER}${TEST_SPLIT}/"
-                --comet_logging
-            )
+    if [ "$test_set" == "flickr2016" ]; then
+        LANGUAGE_PAIRS=(
+            "en de"
+            "de en"
+            "en fr"
+            "fr en"
+            "en cs"
+            "cs en"
+        )
+    else
+        LANGUAGE_PAIRS=(
+            "en de"
+            "de en"
+            "en fr"
+            "fr en"
+        )
+    fi
 
-            $PYTHON_PATH test.py "${TEST_PARAMS[@]}"
-            TEST_EXIT_CODE=$?
+    # Skip test set if language files don't exist
+    if [ ! -f "./data/test_${test_set}.en" ]; then
+        echo "[SCRIPT]: Skipping $test_set, files not found"
+        continue
+    fi
 
-            if [ $TEST_EXIT_CODE -ne 0 ]; then
-                send_discord "[${SLURM_JOB_ID}]: Error testing on ${LANG_PAIR} ${TEST_SPLIT}. Exit code: ${TEST_EXIT_CODE}"
-            else
-                send_discord "[${SLURM_JOB_ID}]: Successfully tested ${LANG_PAIR} on ${TEST_SPLIT}"
-            fi
+    # Test each applicable language pair
+    for pair in "${LANGUAGE_PAIRS[@]}"; do
+        read -r src_lang tgt_lang <<< "$pair"
+
+        # Skip if source or target file doesn't exist
+        if [ ! -f "./data/test_${test_set}.${src_lang}" ] || [ ! -f "./data/test_${test_set}.${tgt_lang}" ]; then
+            echo "[SCRIPT]: Skipping ${src_lang}->${tgt_lang} for $test_set, files not found"
+            continue
+        fi
+
+        send_discord "[${SLURM_JOB_ID}]: Testing ${src_lang}->${tgt_lang} on $test_set"
+
+        # Path to trained model
+        MODEL_PATH="./seq2seq_models/${src_lang}_${tgt_lang}/best_${src_lang}_${tgt_lang}"
+        RESULTS_DIR="${RESULTS_BASE}/${test_set}/${src_lang}_${tgt_lang}"
+        mkdir -p $RESULTS_DIR
+
+        # Set test parameters for this language pair
+        TEST_PARAMS=(
+            --src_lang "$src_lang"
+            --tgt_lang "$tgt_lang"
+            --test_set "$test_set"
+            --model_path "$MODEL_PATH"
+            --save_base_folder "$RESULTS_DIR"
+        )
+
+        # Start testing
+        echo "[SCRIPT]: Testing ${src_lang}->${tgt_lang} on $test_set"
+        $PYTHON_PATH test.py "${BASE_PARAMS[@]}" "${TEST_PARAMS[@]}"
+
+        # Check if testing completed successfully
+        if [ $? -eq 0 ]; then
+            send_discord "[${SLURM_JOB_ID}]: Testing ${src_lang}->${tgt_lang} on $test_set completed successfully"
         else
-            echo "[SCRIPT]: Skipping ${TEST_SPLIT} for ${LANG_PAIR} because files don't exist"
+            send_discord "[${SLURM_JOB_ID}]: Testing ${src_lang}->${tgt_lang} on $test_set failed"
         fi
     done
-
-    # Send a summary message after all test splits are completed for this language pair
-    send_discord "[${SLURM_JOB_ID}]: Completed testing for ${LANG_PAIR}"
 done
 
-send_discord "[${SLURM_JOB_ID}]: All testing completed for all language pairs"
+send_discord "[${SLURM_JOB_ID}]: All testing jobs completed"
 
-LOG_FILE="/home/asidani/logs/nmt/test_job_${SLURM_JOB_ID}.log"
-ERR_FILE="/home/asidani/logs/nmt/test_job_${SLURM_JOB_ID}.err"
+# Send logs if notif.py script exists
+LOG_FILE="/home/$USER/logs/seq2seq/test_${SLURM_JOB_ID}.log"
+ERR_FILE="/home/$USER/logs/seq2seq/test_${SLURM_JOB_ID}.err"
 
-python3 /home/asidani/notif.py "$LOG_FILE" "$ERR_FILE"
+if [ -f "/home/$USER/notif.py" ]; then
+    python3 /home/$USER/notif.py "$LOG_FILE" "$ERR_FILE"
+fi
