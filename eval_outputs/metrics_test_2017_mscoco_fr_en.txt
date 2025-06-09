@@ -1,0 +1,5 @@
+Test Split: test_2017_mscoco
+Language Pair: fr -> en
+BLEU Score: 46.0721
+METEOR Score: 77.9603
+Number of Samples: 461

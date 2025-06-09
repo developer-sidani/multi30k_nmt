@@ -1,0 +1,5 @@
+Test Split: test_2018_flickr
+Language Pair: en -> de
+BLEU Score: 32.6906
+METEOR Score: 61.8221
+Number of Samples: 1071

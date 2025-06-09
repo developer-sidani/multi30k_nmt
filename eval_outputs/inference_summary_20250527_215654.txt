@@ -1,0 +1,60 @@
+Multi30K NMT Inference Summary
+==============================
+Date: Tue May 27 09:56:54 PM UTC 2025
+Job ID: 19083
+
+Test Splits Evaluated:
+  - test_2016_flickr
+  - test_2017_flickr
+  - test_2017_mscoco
+  - test_2018_flickr
+
+Language Pairs Tested:
+  - en fr
+  - fr en
+
+Results Files:
+./eval_outputs/inference_summary_20250527_114340.txt
+./eval_outputs/inference_summary_20250527_121833.txt
+./eval_outputs/inference_summary_20250527_123805.txt
+./eval_outputs/inference_summary_20250527_215654.txt
+./eval_outputs/metrics_test_2016_flickr_cs_en.txt
+./eval_outputs/metrics_test_2016_flickr_de_en.txt
+./eval_outputs/metrics_test_2016_flickr_en_cs.txt
+./eval_outputs/metrics_test_2016_flickr_en_de.txt
+./eval_outputs/metrics_test_2016_flickr_en_fr.txt
+./eval_outputs/metrics_test_2016_flickr_fr_en.txt
+./eval_outputs/metrics_test_2017_flickr_de_en.txt
+./eval_outputs/metrics_test_2017_flickr_en_de.txt
+./eval_outputs/metrics_test_2017_flickr_en_fr.txt
+./eval_outputs/metrics_test_2017_flickr_fr_en.txt
+./eval_outputs/metrics_test_2017_mscoco_de_en.txt
+./eval_outputs/metrics_test_2017_mscoco_en_de.txt
+./eval_outputs/metrics_test_2017_mscoco_en_fr.txt
+./eval_outputs/metrics_test_2017_mscoco_fr_en.txt
+./eval_outputs/metrics_test_2018_flickr_cs_en.txt
+./eval_outputs/metrics_test_2018_flickr_de_en.txt
+./eval_outputs/metrics_test_2018_flickr_en_cs.txt
+./eval_outputs/metrics_test_2018_flickr_en_de.txt
+./eval_outputs/metrics_test_2018_flickr_en_fr.txt
+./eval_outputs/metrics_test_2018_flickr_fr_en.txt
+./eval_outputs/test_test_2016_flickr_cs_en.csv
+./eval_outputs/test_test_2016_flickr_de_en.csv
+./eval_outputs/test_test_2016_flickr_en_cs.csv
+./eval_outputs/test_test_2016_flickr_en_de.csv
+./eval_outputs/test_test_2016_flickr_en_fr.csv
+./eval_outputs/test_test_2016_flickr_fr_en.csv
+./eval_outputs/test_test_2017_flickr_de_en.csv
+./eval_outputs/test_test_2017_flickr_en_de.csv
+./eval_outputs/test_test_2017_flickr_en_fr.csv
+./eval_outputs/test_test_2017_flickr_fr_en.csv
+./eval_outputs/test_test_2017_mscoco_de_en.csv
+./eval_outputs/test_test_2017_mscoco_en_de.csv
+./eval_outputs/test_test_2017_mscoco_en_fr.csv
+./eval_outputs/test_test_2017_mscoco_fr_en.csv
+./eval_outputs/test_test_2018_flickr_cs_en.csv
+./eval_outputs/test_test_2018_flickr_de_en.csv
+./eval_outputs/test_test_2018_flickr_en_cs.csv
+./eval_outputs/test_test_2018_flickr_en_de.csv
+./eval_outputs/test_test_2018_flickr_en_fr.csv
+./eval_outputs/test_test_2018_flickr_fr_en.csv

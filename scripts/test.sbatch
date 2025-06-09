@@ -1,138 +1,177 @@
 #!/bin/bash
-#SBATCH --time=10:00:00
+#SBATCH --time=23:59:59
 #SBATCH --ntasks=1
-#SBATCH --partition=cuda
+#SBATCH --partition=gpu_a40
 #SBATCH --gres=gpu:1
-#SBATCH --job-name=nmt_test
-#SBATCH --mem=40GB
-#SBATCH --output=/home/asidani/logs/nmt/test_job_%j.log
-#SBATCH --error=/home/asidani/logs/nmt/test_job_%j.err
-
-###### 1 Load the module
-module load nvidia/cudasdk/11.6
-module load intel/python/3
+#SBATCH --job-name=multi30k_nmt_test
+#SBATCH --mem=32GB
+#SBATCH --output=/home/asidani/logs/multi30k_nmt/test_job_%j.log
+#SBATCH --error=/home/asidani/logs/multi30k_nmt/test_job_%j.err
 
 function send_discord {
     python3 /home/asidani/message.py "$@"
 }
 
+source ~/.bashrc
+source ~/miniconda3/bin/activate
+conda activate cyclegan
+
 echo "[SCRIPT]: Checking GPU availability"
 which nvidia-smi || echo "nvidia-smi not found"
-nvidia-smi || echo "Unable to run nvidia-smi"
+nvidia-smi || echo "Unable to run nvidia-smi"  
 
 # Select GPU with least memory usage
 export CUDA_VISIBLE_DEVICES=$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits | awk '{ print NR-1 " " $1 }' | sort -k2 -n | tail -n1 | awk '{ print $1 }')
 echo "[SCRIPT]: Selected GPU ID: $CUDA_VISIBLE_DEVICES"
 
-source ~/.bashrc
-source activate /home/asidani/.conda/envs/cliptrans
+cd /home/asidani/multi30k_nmt/
 
-cd /home/asidani/multi30k_nmt
+echo "[SCRIPT]: Starting inference on Multi30K test sets"
+send_discord "[${SLURM_JOB_ID}]: Starting inference on Multi30K test sets"
 
-send_discord "[${SLURM_JOB_ID}]: Starting Testing"
+# Configuration
+DATA_DIR="./data/multi30k/data/task1/raw"  # Using raw data
+CHECKPOINTS_BASE_DIR="./checkpoints"
+OUTPUT_DIR="./eval_outputs"
+BATCH_SIZE=16
+MAX_LENGTH=60
 
-PYTHON_PATH="/home/asidani/.conda/envs/cliptrans/bin/python3"
+# Create output directory
+mkdir -p $OUTPUT_DIR
 
-LANG_PAIRS=(
-    "en2de"
-    "de2en"
-    "en2fr"
-    "fr2en"
-    "en2cs"
-    "cs2en"
-)
+# Test splits to evaluate
+TEST_SPLITS=("test_2016_flickr" "test_2017_flickr" "test_2017_mscoco" "test_2018_flickr")
 
-send_discord "[${SLURM_JOB_ID}]: Starting testing for all language pairs: ${LANG_PAIRS[*]}"
+# Language pairs
+LANGUAGE_PAIRS=("en fr" "fr en")
 
-# List of test splits to evaluate
-TEST_SPLITS=(
-    "test_2016_flickr"
-    "test_2016_val"
-    "test_2017_flickr"
-    "test_2017_mscoco"
-    "test_2018_flickr"
-)
+# Function to run inference for a specific model and test split
+run_inference() {
+    local src_lang=$1
+    local tgt_lang=$2
+    local test_split=$3
+    local model_dir=$4
+    
+    echo "Running inference: $src_lang -> $tgt_lang on $test_split"
+    
+    # Check if model directory exists
+    if [ ! -d "$model_dir" ]; then
+        echo "Model directory not found: $model_dir"
+        return 1
+    fi
+    
+    # Run test script
+    python test.py \
+        --data_dir "$DATA_DIR" \
+        --model_dir "$model_dir" \
+        --test_split "$test_split" \
+        --src "$src_lang" \
+        --tgt "$tgt_lang" \
+        --max_length $MAX_LENGTH \
+        --batch_size $BATCH_SIZE \
+        --save_base_folder "$OUTPUT_DIR" \
+        --use_cuda_if_available \
+        --comet_logging
+    
+    if [ $? -eq 0 ]; then
+        echo "Successfully completed inference for $src_lang -> $tgt_lang on $test_split"
+        return 0
+    else
+        echo "Error in inference for $src_lang -> $tgt_lang on $test_split"
+        return 1
+    fi
+}
 
-# Test each language pair sequentially
-for LANG_PAIR in "${LANG_PAIRS[@]}"; do
-    echo "[SCRIPT]: Starting testing for language pair: ${LANG_PAIR}"
-    send_discord "[${SLURM_JOB_ID}]: Starting testing for ${LANG_PAIR}"
-
-    case $LANG_PAIR in
-        en2de)
-            SRC="en"
-            TGT="de"
-            MODEL_DIR="./models/mbart50-multi30k-de"
-            SAVE_FOLDER="./eval_outputs/en2de/"
-            ;;
-        de2en)
-            SRC="de"
-            TGT="en"
-            MODEL_DIR="./models/mbart50-multi30k-de2en"
-            SAVE_FOLDER="./eval_outputs/de2en/"
-            ;;
-        en2fr)
-            SRC="en"
-            TGT="fr"
-            MODEL_DIR="./models/mbart50-multi30k-fr"
-            SAVE_FOLDER="./eval_outputs/en2fr/"
-            ;;
-        fr2en)
-            SRC="fr"
-            TGT="en"
-            MODEL_DIR="./models/mbart50-multi30k-fr2en"
-            SAVE_FOLDER="./eval_outputs/fr2en/"
-            ;;
-        en2cs)
-            SRC="en"
-            TGT="cs"
-            MODEL_DIR="./models/mbart50-multi30k-cs"
-            SAVE_FOLDER="./eval_outputs/en2cs/"
-            ;;
-        cs2en)
-            SRC="cs"
-            TGT="en"
-            MODEL_DIR="./models/mbart50-multi30k-cs2en"
-            SAVE_FOLDER="./eval_outputs/cs2en/"
-            ;;
-    esac
-
-    for TEST_SPLIT in "${TEST_SPLITS[@]}"; do
-        if [ -f "./data/${TEST_SPLIT}.${SRC}" ] && [ -f "./data/${TEST_SPLIT}.${TGT}" ]; then
-            echo "[SCRIPT]: Testing on ${TEST_SPLIT} (${SRC}->${TGT})"
-
-            TEST_PARAMS=(
-                --data_dir ./data
-                --model_dir "${MODEL_DIR}"
-                --test_split "${TEST_SPLIT}"
-                --src "${SRC}"
-                --tgt "${TGT}"
-                --max_length 64
-                --use_cuda_if_available
-                --save_base_folder "${SAVE_FOLDER}${TEST_SPLIT}/"
-                --comet_logging
-            )
-
-            $PYTHON_PATH test.py "${TEST_PARAMS[@]}"
-            TEST_EXIT_CODE=$?
-
-            if [ $TEST_EXIT_CODE -ne 0 ]; then
-                send_discord "[${SLURM_JOB_ID}]: Error testing on ${LANG_PAIR} ${TEST_SPLIT}. Exit code: ${TEST_EXIT_CODE}"
-            else
-                send_discord "[${SLURM_JOB_ID}]: Successfully tested ${LANG_PAIR} on ${TEST_SPLIT}"
-            fi
+# Function to test all splits for a language pair
+test_language_pair() {
+    local src_lang=$1
+    local tgt_lang=$2
+    
+    echo ""
+    echo "Testing language pair: $src_lang -> $tgt_lang"
+    echo "========================================"
+    
+    # Determine model directory
+    if [ "$src_lang" = "en" ]; then
+        model_dir="$CHECKPOINTS_BASE_DIR/en_${tgt_lang}_model/en_to_${tgt_lang}/best_model"
+    else
+        model_dir="$CHECKPOINTS_BASE_DIR/en_${src_lang}_model/${src_lang}_to_en/best_model"
+    fi
+    
+    echo "Using model from: $model_dir"
+    
+    # Test on all test splits
+    for test_split in "${TEST_SPLITS[@]}"; do
+        echo ""
+        echo "Testing on $test_split..."
+        
+        # Check if test files exist for this language pair and test split
+        src_file="$DATA_DIR/${test_split}.${src_lang}"
+        tgt_file="$DATA_DIR/${test_split}.${tgt_lang}"
+        
+        if [ ! -f "$src_file" ] || [ ! -f "$tgt_file" ]; then
+            echo "Test files not found for $test_split ($src_lang -> $tgt_lang)"
+            echo "Expected: $src_file and $tgt_file"
+            continue
+        fi
+        
+        run_inference "$src_lang" "$tgt_lang" "${test_split}" "$model_dir"
+        
+        if [ $? -eq 0 ]; then
+            send_discord "[${SLURM_JOB_ID}]: ✅ Completed $src_lang -> $tgt_lang on $test_split"
         else
-            echo "[SCRIPT]: Skipping ${TEST_SPLIT} for ${LANG_PAIR} because files don't exist"
+            send_discord "[${SLURM_JOB_ID}]: ❌ Failed $src_lang -> $tgt_lang on $test_split"
         fi
     done
+}
 
-    # Send a summary message after all test splits are completed for this language pair
-    send_discord "[${SLURM_JOB_ID}]: Completed testing for ${LANG_PAIR}"
+# Main inference loop
+echo "Starting comprehensive evaluation..."
+echo "===================================="
+
+# Test all language pairs
+for pair in "${LANGUAGE_PAIRS[@]}"; do
+    IFS=' ' read -r src_lang tgt_lang <<< "$pair"
+    test_language_pair "$src_lang" "$tgt_lang"
 done
 
-send_discord "[${SLURM_JOB_ID}]: All testing completed for all language pairs"
+echo ""
+echo "All inference completed!"
+echo "======================="
+send_discord "[${SLURM_JOB_ID}]: All inference completed! Results saved to $OUTPUT_DIR"
 
-LOG_FILE="/home/asidani/logs/nmt/test_job_${SLURM_JOB_ID}.log"
-ERR_FILE="/home/asidani/logs/nmt/test_job_${SLURM_JOB_ID}.err"
+# Create summary report
+echo "Creating summary report..."
+SUMMARY_FILE="$OUTPUT_DIR/inference_summary_$(date +%Y%m%d_%H%M%S).txt"
 
-python3 /home/asidani/notif.py "$LOG_FILE" "$ERR_FILE"
+{
+    echo "Multi30K NMT Inference Summary"
+    echo "=============================="
+    echo "Date: $(date)"
+    echo "Job ID: ${SLURM_JOB_ID}"
+    echo ""
+    
+    echo "Test Splits Evaluated:"
+    for split in "${TEST_SPLITS[@]}"; do
+        echo "  - $split"
+    done
+    
+    echo ""
+    echo "Language Pairs Tested:"
+    for pair in "${LANGUAGE_PAIRS[@]}"; do
+        echo "  - $pair"
+    done
+    
+    echo ""
+    echo "Results Files:"
+    find "$OUTPUT_DIR" -name "*.csv" -o -name "*.txt" | sort
+    
+} > "$SUMMARY_FILE"
+
+echo "Summary report saved to: $SUMMARY_FILE"
+
+# Send final notification with log files
+LOG_FILE="/home/asidani/logs/multi30k_nmt/test_job_${SLURM_JOB_ID}.log"
+ERR_FILE="/home/asidani/logs/multi30k_nmt/test_job_${SLURM_JOB_ID}.err"
+
+python3 /home/asidani/notif.py "$LOG_FILE" "$ERR_FILE" 

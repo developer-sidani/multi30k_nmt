@@ -1,0 +1,21 @@
+Multi30K NMT Inference Summary
+==============================
+Date: Tue May 27 11:43:40 AM UTC 2025
+Job ID: 19023
+
+Test Splits Evaluated:
+  - test_2016_flickr
+  - test_2017_flickr
+  - test_2017_mscoco
+  - test_2018_flickr
+
+Language Pairs Tested:
+  - en cs
+  - cs en
+  - en de
+  - de en
+  - en fr
+  - fr en
+
+Results Files:
+./eval_outputs/inference_summary_20250527_114340.txt
